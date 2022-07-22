@@ -55,8 +55,8 @@ func (n Notification) Validate(hash hash.Hash, signature string) error {
 	}
 
 	_, _ = hash.Write(bytes)
-	expectedMAC := hex.EncodeToString(hash.Sum(nil))
-	if !hmac.Equal([]byte(signature), []byte(expectedMAC)) {
+	expectedHash := hex.EncodeToString(hash.Sum(nil))
+	if !hmac.Equal([]byte(signature), []byte(expectedHash)) {
 		return ErrInvalidSignature
 	}
 
