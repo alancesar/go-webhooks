@@ -38,6 +38,8 @@ func main() {
 		if err := sendNotification(message, secret); err != nil {
 			fmt.Println(err)
 		}
+
+		log.Println("message sent successfully")
 	}
 }
 
@@ -57,9 +59,9 @@ func sendNotification(message, secret string) error {
 
 	if response.StatusCode != http.StatusCreated {
 		return fmt.Errorf("unexpected status code: %d", response.StatusCode)
-	} else {
-		return fmt.Errorf("message sent successfully")
 	}
+
+	return nil
 }
 
 func generateSignature(message, secret string) string {
