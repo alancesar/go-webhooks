@@ -4,28 +4,26 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
+	"github.com/alancesar/go-webhooks/pkg"
 	"log"
 	"math/rand"
 	"net/http"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
 
 const (
-	signaturePrefix    = "sha256="
-	signatureHeaderKey = "X-Signature"
-	addr               = ":8080"
-	secretLength       = 16
+	addr         = ":8080"
+	secretLength = 16
 )
 
 var (
-	letterRunes        = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-	signaturePrefixLen = len(signaturePrefix)
+	letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 )
 
 func main() {
@@ -39,26 +37,28 @@ func main() {
 			return
 		}
 
-		bytes, err := io.ReadAll(request.Body)
-		if err != nil {
-			writer.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		signature := request.Header.Get(signatureHeaderKey)
+		signature := request.Header.Get(pkg.SignatureHeaderKey)
 		if len(signature) == 0 {
 			fmt.Println("message denied: signature is not present")
 			writer.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 
-		if err := checkSignature(bytes, signature, secret); err != nil {
+		var notification pkg.Notification
+		if err := json.NewDecoder(request.Body).Decode(&notification); err != nil {
+			writer.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		hash := hmac.New(sha256.New, []byte(secret))
+		_, signature, _ = strings.Cut(signature, "=")
+		if err := notification.Validate(hash, signature); err != nil {
 			fmt.Println("message denied: invalid signature")
 			writer.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 
-		fmt.Printf("message received successfully: %s", string(bytes))
+		fmt.Printf("message received successfully: %s", notification.Message)
 		writer.WriteHeader(http.StatusCreated)
 	})
 
@@ -88,15 +88,4 @@ func generateSecret(length int) string {
 		b[i] = letterRunes[rand.Intn(len(letterRunes))]
 	}
 	return string(b)
-}
-
-func checkSignature(input []byte, signature, secret string) error {
-	mac := hmac.New(sha256.New, []byte(secret))
-	_, _ = mac.Write(input)
-	expectedMAC := hex.EncodeToString(mac.Sum(nil))
-	if !hmac.Equal([]byte(signature[signaturePrefixLen:]), []byte(expectedMAC)) {
-		return errors.New("invalid signature")
-	}
-
-	return nil
 }

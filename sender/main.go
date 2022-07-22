@@ -2,10 +2,11 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
+	"github.com/alancesar/go-webhooks/pkg"
 	"log"
 	"net/http"
 	"os"
@@ -13,9 +14,7 @@ import (
 )
 
 const (
-	webhookURL         = "http://localhost:8080/notifications"
-	signatureHeaderKey = "X-Signature"
-	signaturePrefix    = "sha256"
+	webhookURL = "http://localhost:8080/notifications"
 )
 
 func main() {
@@ -44,13 +43,25 @@ func main() {
 }
 
 func sendNotification(message, secret string) error {
-	body := strings.NewReader(message)
+	notification := pkg.NewNotification(message)
+	payload, err := notification.Marshal()
+	if err != nil {
+		return err
+	}
+
+	body := bytes.NewReader(payload)
 	request, err := http.NewRequest(http.MethodPost, webhookURL, body)
 	if err != nil {
 		return err
 	}
-	signature := generateSignature(message, secret)
-	request.Header.Add(signatureHeaderKey, signature)
+
+	hash := hmac.New(sha256.New, []byte(secret))
+	signature, err := notification.Sign(hash)
+	if err != nil {
+		return err
+	}
+
+	request.Header.Add(pkg.SignatureHeaderKey, signature)
 
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
@@ -62,11 +73,4 @@ func sendNotification(message, secret string) error {
 	}
 
 	return nil
-}
-
-func generateSignature(message, secret string) string {
-	mac := hmac.New(sha256.New, []byte(secret))
-	_, _ = mac.Write([]byte(message))
-	signature := hex.EncodeToString(mac.Sum(nil))
-	return fmt.Sprintf("%s=%s", signaturePrefix, signature)
 }
